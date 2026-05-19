@@ -1,16 +1,19 @@
 {
-  "name": "claude-code-best",
+  "name": "@takocode/taco",
   "version": "2.4.4",
-  "description": "Reverse-engineered Anthropic Claude Code CLI — interactive AI coding assistant in the terminal",
+  "description": "TakoCode — a Claude Code fork wired into the TakoFlow desktop agent",
   "type": "module",
-  "author": "claude-code-best <claude-code-best@proton.me>",
+  "author": "FanHeran",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/claude-code-best/claude-code.git"
+    "url": "git+https://github.com/FanHeran/claude-code.git"
   },
-  "homepage": "https://github.com/claude-code-best/claude-code#readme",
+  "homepage": "https://github.com/FanHeran/claude-code#readme",
   "bugs": {
-    "url": "https://github.com/claude-code-best/claude-code/issues"
+    "url": "https://github.com/FanHeran/claude-code/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "keywords": [
     "claude",
