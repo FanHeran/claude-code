@@ -27,7 +27,8 @@
   "bin": {
     "ccb": "dist/cli-node.js",
     "ccb-bun": "dist/cli-bun.js",
-    "claude-code-best": "dist/cli-node.js"
+    "claude-code-best": "dist/cli-node.js",
+    "taco": "dist/cli-node.js"
   },
   "workspaces": [
     "packages/*",
