@@ -67,6 +67,7 @@
     "check:unused": "knip-bun",
     "health": "bun run scripts/health-check.ts",
     "postinstall": "node scripts/run-parallel.mjs scripts/postinstall.cjs scripts/setup-chrome-mcp.mjs",
+    "setup:all-platforms": "node scripts/setup-all-platforms.cjs",
     "docs:dev": "npx mintlify dev",
     "typecheck": "tsc --noEmit",
     "precheck": "bun run typecheck && bun run check:fix && bun test",
