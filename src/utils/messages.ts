@@ -5833,13 +5833,24 @@ export function ensureToolResultPairing(
         // the assistant placeholder we just pushed would be immediately
         // followed by the NEXT assistant message, which the API rejects with
         // a role-alternation 400 (not the duplicate-id 400 we handle).
+        //
+        // BUT: if the previous result entry is already a user, pushing another
+        // user creates consecutive-user messages — Anthropic then 400s with a
+        // misleading "tool_use ids were found without tool_result blocks
+        // immediately after". This happens when an assistant carries
+        // [thinking, dup tool_use], we dedup the tool_use, normalize later
+        // drops the thinking-only assistant, and we're left with two adjacent
+        // users (legitimate prior tool_result + this placeholder).
+        // Skip the placeholder; the next iteration's assistant restores alternation.
         i++
-        result.push(
-          createUserMessage({
-            content: NO_CONTENT_MESSAGE,
-            isMeta: true,
-          }),
-        )
+        if (result.at(-1)?.message?.role !== 'user') {
+          result.push(
+            createUserMessage({
+              content: NO_CONTENT_MESSAGE,
+              isMeta: true,
+            }),
+          )
+        }
       }
     } else {
       // No user message follows - insert a synthetic user message (only if missing IDs)

@@ -1063,7 +1063,28 @@ async function* queryLoop(
             }
             if (message.type === 'assistant') {
               const assistantMessage = message as AssistantMessage
-              assistantMessages.push(assistantMessage)
+              // Streaming: claude.ts yields one AssistantMessage per
+              // content_block_stop, each carrying only that single block.
+              // For multi-block turns (e.g. extended thinking + tool_use),
+              // naively appending each yield creates multiple
+              // assistantMessages entries sharing the same message.id —
+              // which feeds into the recursive API call as duplicate
+              // consecutive assistant messages, triggering Anthropic's
+              // misleading "tool_use ids without tool_result" 400.
+              //
+              // QueryEngine's same-id merge (case 'assistant') has already
+              // mutated the shared message object's .content to include the
+              // new block. Since mutableMessages and our local
+              // assistantMessages reference the SAME message object, we just
+              // need to skip the duplicate push here.
+              const prev = assistantMessages.at(-1)
+              const prevId = prev?.message?.id
+              const newId = assistantMessage.message?.id
+              const isStreamingContinuation =
+                prev != null && prevId != null && newId === prevId
+              if (!isStreamingContinuation) {
+                assistantMessages.push(assistantMessage)
+              }
 
               const msgToolUseBlocks = (
                 Array.isArray(assistantMessage.message?.content)
@@ -2025,8 +2046,34 @@ async function* queryLoop(
     }
 
     queryCheckpoint('query_recursive_call')
+    // QueryEngine's submitMessage pushes EVERY yielded message into the
+    // shared `messages` array (= state.messages = messagesForQuery, since
+    // getMessagesAfterCompactBoundary returns it by reference when there's
+    // no compact boundary). That means messagesForQuery already contains
+    // this iteration's assistant + tool_result messages by the time we
+    // reach this recursive setup. Naively concat'ing the local
+    // assistantMessages/toolResults accumulators here would duplicate them.
+    //
+    // Filter out items that are already present in messagesForQuery by
+    // object identity (uuid). This preserves the existing semantics for
+    // the rare case where messagesForQuery has been replaced by a compact
+    // transform (its items have different identities, so all local items
+    // pass the filter) and removes the duplicates in the common case.
+    const seenUuidsInMfQ = new Set<string>()
+    for (const m of messagesForQuery) {
+      const u = (m as { uuid?: string }).uuid
+      if (u) seenUuidsInMfQ.add(u)
+    }
+    const assistantToAdd = assistantMessages.filter(m => {
+      const u = (m as { uuid?: string }).uuid
+      return !u || !seenUuidsInMfQ.has(u)
+    })
+    const toolResultsToAdd = toolResults.filter(m => {
+      const u = (m as { uuid?: string }).uuid
+      return !u || !seenUuidsInMfQ.has(u)
+    })
     const next: State = {
-      messages: messagesForQuery.concat(assistantMessages, toolResults),
+      messages: messagesForQuery.concat(assistantToAdd, toolResultsToAdd),
       toolUseContext: toolUseContextWithQueryTracking,
       autoCompactTracking: tracking,
       turnCount: nextTurnCount,

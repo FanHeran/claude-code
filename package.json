@@ -1,6 +1,6 @@
 {
   "name": "@takocode/taco",
-  "version": "2.4.5",
+  "version": "2.4.6",
   "description": "TakoCode — a Claude Code fork wired into the TakoFlow desktop agent",
   "type": "module",
   "author": "FanHeran",
