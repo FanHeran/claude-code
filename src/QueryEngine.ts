@@ -728,7 +728,36 @@ export class QueryEngine {
             }
           }
         }
-        messages.push(message as Message)
+        // Same-id streaming continuation: claude.ts yields one assistant
+        // message per content_block_stop. For multi-block turns (e.g.
+        // extended thinking + tool_use), pushing each yield to `messages`
+        // separately creates duplicate entries with the same message.id —
+        // which feeds into query.ts's `messagesForQuery.concat(
+        // assistantMessages, toolResults)` recursive setup as duplicated
+        // assistant turns, triggering Anthropic's misleading "tool_use
+        // without tool_result" 400. Mirror the same-id merge applied at
+        // the `case 'assistant'` branch (~L788) and the assistantMessages
+        // accumulator in query.ts so all three views stay in sync.
+        const __msg = message as Message
+        const __lastInMsgs = messages.at(-1) as Message | undefined
+        const __lastInner = __lastInMsgs?.message
+        const __newInner = __msg.message
+        const __isStreamingContinuation =
+          __msg.type === 'assistant' &&
+          __lastInMsgs?.type === 'assistant' &&
+          __lastInner?.id != null &&
+          __newInner?.id === __lastInner.id &&
+          Array.isArray(__lastInner.content) &&
+          Array.isArray(__newInner.content)
+        if (__isStreamingContinuation && __lastInner && __newInner) {
+          // Don't append — the previous entry's .content was already
+          // mutated by the `case 'assistant'` merge (mutableMessages and
+          // messages share the same message object references via the
+          // shallow copy at L444). Pushing again would duplicate the
+          // assistant turn in state.messages.
+        } else {
+          messages.push(__msg)
+        }
         if (persistSession) {
           // Fire-and-forget for assistant messages. claude.ts yields one
           // assistant message per content block, then mutates the last
@@ -785,7 +814,43 @@ export class QueryEngine {
           if (stopReason != null) {
             lastStopReason = stopReason
           }
-          this.mutableMessages.push(msg)
+
+          // Streaming: claude.ts yields one AssistantMessage per
+          // content_block_stop, each carrying only that single block. For a
+          // multi-block turn (e.g. extended thinking + tool_use), naively
+          // pushing each yield creates multiple mutableMessages entries that
+          // share the same message.id. ensureToolResultPairing then dedupes
+          // the "second" tool_use, drops one block, and downstream
+          // normalize+pairing produces two consecutive user messages that
+          // Anthropic rejects with a misleading "tool_use ids were found
+          // without tool_result blocks immediately after" 400.
+          //
+          // Merge same-id continuation blocks into the previous push.
+          const lastMsg = this.mutableMessages.at(-1) as Message | undefined
+          const lastInner = lastMsg?.message
+          const newInner = msg.message
+          const isStreamingContinuation =
+            lastMsg?.type === 'assistant' &&
+            lastInner?.id != null &&
+            newInner?.id === lastInner.id &&
+            Array.isArray(lastInner.content) &&
+            Array.isArray(newInner.content)
+          if (isStreamingContinuation && lastInner && newInner) {
+            const lastContent = lastInner.content as unknown[]
+            const newContent = newInner.content as unknown[]
+            ;(lastInner as { content: unknown }).content = [
+              ...lastContent,
+              ...newContent,
+            ]
+            // Keep latest usage / stop_reason on the merged record so the
+            // transcript flush captures the final values (claude.ts mutates
+            // these in place at message_delta — see the comment there).
+            if (newInner.usage) lastInner.usage = newInner.usage
+            if (newInner.stop_reason != null)
+              lastInner.stop_reason = newInner.stop_reason
+          } else {
+            this.mutableMessages.push(msg)
+          }
           yield* normalizeMessage(msg)
           break
         }
