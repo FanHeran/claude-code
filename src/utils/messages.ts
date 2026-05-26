@@ -4593,7 +4593,7 @@ You have exited auto mode. The user may now want to interact more directly. You 
       const parts: string[] = []
       if (attachment.addedLines.length > 0) {
         parts.push(
-          `The following deferred tools are now available via SearchExtraTools:\n${attachment.addedLines.join('\n')}`,
+          `The following deferred tools are now available:\n${attachment.addedLines.join('\n')}\n\nTo use these tools, call SearchExtraTools then ExecuteExtraTool — both are core tools already in your tool list. Call them directly, do NOT use Bash/Glob to find them.`,
         )
       }
       if (attachment.removedNames.length > 0) {
@@ -5829,28 +5829,21 @@ export function ensureToolResultPairing(
         )
       } else {
         // Content is empty after stripping orphaned tool_results. We still
-        // need a user message here to maintain role alternation — otherwise
-        // the assistant placeholder we just pushed would be immediately
-        // followed by the NEXT assistant message, which the API rejects with
-        // a role-alternation 400 (not the duplicate-id 400 we handle).
-        //
-        // BUT: if the previous result entry is already a user, pushing another
-        // user creates consecutive-user messages — Anthropic then 400s with a
-        // misleading "tool_use ids were found without tool_result blocks
-        // immediately after". This happens when an assistant carries
-        // [thinking, dup tool_use], we dedup the tool_use, normalize later
-        // drops the thinking-only assistant, and we're left with two adjacent
-        // users (legitimate prior tool_result + this placeholder).
-        // Skip the placeholder; the next iteration's assistant restores alternation.
+        // need a user message here to maintain role alternation — unless the
+        // previous result entry is already a user message, in which case
+        // inserting another user placeholder creates consecutive-user messages
+        // that Anthropic rejects with a misleading "tool_use without
+        // tool_result" 400 (CC-1215).
         i++
-        if (result.at(-1)?.message?.role !== 'user') {
-          result.push(
-            createUserMessage({
-              content: NO_CONTENT_MESSAGE,
-              isMeta: true,
-            }),
-          )
+        if (result.at(-1)?.type === 'user') {
+          continue
         }
+        result.push(
+          createUserMessage({
+            content: NO_CONTENT_MESSAGE,
+            isMeta: true,
+          }),
+        )
       }
     } else {
       // No user message follows - insert a synthetic user message (only if missing IDs)
