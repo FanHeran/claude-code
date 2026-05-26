@@ -376,41 +376,6 @@ function logToolUseToolResultMismatch(
       normalizedToolUseIndex: normalizedIndex,
       originalToolUseIndex: originalIndex,
     })
-
-    // [DEBUG-ACP] Print the diagnostic to stderr too, so local repros can see
-    // exactly which tool_use is orphaned and what's adjacent without needing
-    // Statsig access. Gated by env var so prod sessions stay quiet.
-    if (process.env.TACO_DEBUG_TOOL_PAIRING) {
-      const banner = '━'.repeat(60)
-      // eslint-disable-next-line no-console
-      console.error(`\n${banner}`)
-      // eslint-disable-next-line no-console
-      console.error(`[TACO_DEBUG] tool_use/tool_result mismatch`)
-      // eslint-disable-next-line no-console
-      console.error(`  orphan tool_use_id: ${toolUseId}`)
-      // eslint-disable-next-line no-console
-      console.error(
-        `  normalizedToolUseIndex=${normalizedIndex}/${messagesForAPI.length}  originalToolUseIndex=${originalIndex}/${messages.length}`,
-      )
-      // eslint-disable-next-line no-console
-      console.error(
-        `  normalizedSequence (what follows the orphan in the API payload):`,
-      )
-      // eslint-disable-next-line no-console
-      console.error(
-        `    ${normalizedSeq.length === 0 ? '(empty)' : normalizedSeq.join('\n    ')}`,
-      )
-      // eslint-disable-next-line no-console
-      console.error(
-        `  preNormalizedSequence (what follows the orphan in original messages):`,
-      )
-      // eslint-disable-next-line no-console
-      console.error(
-        `    ${preNormalizedSeq.length === 0 ? '(empty)' : preNormalizedSeq.join('\n    ')}`,
-      )
-      // eslint-disable-next-line no-console
-      console.error(`${banner}\n`)
-    }
   } catch (_) {
     // Ignore errors in debug logging
   }
