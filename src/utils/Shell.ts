@@ -2,7 +2,7 @@ import { execFileSync, spawn } from 'child_process'
 import { constants as fsConstants, readFileSync, unlinkSync } from 'fs'
 import { type FileHandle, mkdir, open, realpath } from 'fs/promises'
 import memoize from 'lodash-es/memoize.js'
-import { isAbsolute, resolve } from 'path'
+import { delimiter, dirname, isAbsolute, resolve } from 'path'
 import { join as posixJoin } from 'path/posix'
 import { logEvent } from 'src/services/analytics/index.js'
 import {
@@ -313,19 +313,31 @@ export async function exec(
   }
 
   try {
+    const childEnv: Record<string, string | undefined> = {
+      ...subprocessEnv(),
+      SHELL: shellType === 'bash' ? binShell : undefined,
+      GIT_EDITOR: 'true',
+      CLAUDECODE: '1',
+      ...envOverrides,
+      ...(process.env.USER_TYPE === 'ant'
+        ? {
+            CLAUDE_CODE_SESSION_ID: getSessionId(),
+          }
+        : {}),
+    }
+    // The shell's own directory holds the coreutils (ls/grep/sed/…). A bundled
+    // minimal git-bash has no /etc/profile PATH setup for non-login shells, so
+    // prepend that dir or the tools resolve as "command not found". MSYS bash
+    // converts the Windows path to POSIX on startup. (PATH key is 'Path' on
+    // Windows — normalize so we extend the real value.)
+    if (shellType === 'bash') {
+      const binDir = dirname(binShell)
+      const pathKey =
+        Object.keys(childEnv).find(k => k.toLowerCase() === 'path') ?? 'PATH'
+      childEnv[pathKey] = `${binDir}${delimiter}${childEnv[pathKey] ?? ''}`
+    }
     const childProcess = spawn(spawnBinary, shellArgs, {
-      env: {
-        ...subprocessEnv(),
-        SHELL: shellType === 'bash' ? binShell : undefined,
-        GIT_EDITOR: 'true',
-        CLAUDECODE: '1',
-        ...envOverrides,
-        ...(process.env.USER_TYPE === 'ant'
-          ? {
-              CLAUDE_CODE_SESSION_ID: getSessionId(),
-            }
-          : {}),
-      },
+      env: childEnv,
       cwd,
       stdio: usePipeMode
         ? ['pipe', 'pipe', 'pipe']

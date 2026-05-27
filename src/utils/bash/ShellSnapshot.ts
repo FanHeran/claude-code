@@ -2,7 +2,7 @@ import { execFile } from 'child_process'
 import { execa } from 'execa'
 import { mkdir, stat } from 'fs/promises'
 import * as os from 'os'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { logEvent } from 'src/services/analytics/index.js'
 import { registerCleanup } from '../cleanupRegistry.js'
 import { getCwd } from '../cwd.js'
@@ -18,6 +18,7 @@ import { logError } from '../log.js'
 import { getPlatform } from '../platform.js'
 import { ripgrepCommand } from '../ripgrep.js'
 import { subprocessEnv } from '../subprocessEnv.js'
+import { findGitBashPath, windowsPathToPosixPath } from '../windowsPaths.js'
 import { quote } from './shellQuote.js'
 
 const LITERAL_BACKSLASH = '\\'
@@ -279,6 +280,21 @@ async function getClaudeCodeSnapshotContent(): Promise<string> {
       pathValue = cygwinResult.stdout.trim()
     }
     // Fall back to process.env.PATH if we can't get Cygwin PATH
+
+    // Ensure the git-bash bin dir (holding the coreutils) is on PATH. A bundled,
+    // trimmed PortableGit has no /etc/profile PATH setup, so ls/grep/sed/… would
+    // otherwise resolve as "command not found". findGitBashPath() returns the
+    // bash.exe path; its dir holds the coreutils.
+    try {
+      const binDirPosix = windowsPathToPosixPath(dirname(findGitBashPath()))
+      const segments = (pathValue || '').split(':').filter(Boolean)
+      if (!segments.includes(binDirPosix)) {
+        pathValue = pathValue ? `${binDirPosix}:${pathValue}` : binDirPosix
+      }
+    } catch {
+      // findGitBashPath hard-exits when no bash is found; in practice
+      // CLAUDE_CODE_GIT_BASH_PATH is set so it returns early.
+    }
   }
 
   const rgIntegration = createRipgrepShellIntegration()
