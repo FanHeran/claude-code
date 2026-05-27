@@ -135,6 +135,12 @@ const shim = {
   clearResourceTimings: (() => {}) as typeof performance.clearResourceTimings,
   setResourceTimingBufferSize:
     (() => {}) as typeof performance.setResourceTimingBufferSize,
+  // Node's undici calls performance.markResourceTiming() after every fetch
+  // completes. The native Performance has it; this shim must too, or Node
+  // (cli-node.js) hard-crashes with a libuv assertion (0xC0000409) on the
+  // first API request. No-op is fine — we only care about suppressing the
+  // JSC/Bun resource-timing leak, not recording entries.
+  markResourceTiming: (() => {}) as any,
   // Delegate read-only properties to the original
   get timeOrigin() {
     return original.timeOrigin
@@ -148,7 +154,7 @@ const shim = {
   toJSON() {
     return original.toJSON()
   },
-} as typeof performance
+} as unknown as typeof performance
 
 /**
  * Install the shim onto globalThis.performance. Safe to call multiple times.
@@ -157,6 +163,12 @@ const shim = {
  */
 export function installPerformanceShim(): void {
   if ((globalThis as any).__performanceShimInstalled) return
+  // This shim exists ONLY to suppress a JSC/Bun resource-timing Vector leak.
+  // Node has no such leak, and replacing globalThis.performance under Node
+  // breaks undici's per-fetch markResourceTiming() call → TypeError → libuv
+  // assertion → hard crash (0xC0000409) on the first API request. So under
+  // Node (cli-node.js) we leave the native performance untouched.
+  if (typeof (globalThis as any).Bun === 'undefined') return
   ;(globalThis as any).__performanceShimInstalled = true
   globalThis.performance = shim
 }
