@@ -819,6 +819,20 @@ export async function forwardSessionUpdates(
             lastAssistantModel = assistantMsg.model as string
           }
 
+          // Top-level assistant content (parent_tool_use_id === null) has
+          // already been streamed to the client incrementally via the
+          // 'stream_event' branch above — ACP mode hard-codes
+          // includePartialMessages: true (agent.ts), so every top-level
+          // turn produces both partial stream events AND a final full
+          // assistant message. Forwarding the full message here too would
+          // double every chunk (observed: "BANANA" → "BANANABANANA").
+          // Sub-agent messages (parent_tool_use_id != null) are NOT streamed
+          // — QueryEngine fixes stream_event's parent_tool_use_id to null —
+          // so they must still be forwarded from here.
+          if (parentToolUseId === null) {
+            break
+          }
+
           const notifications = assistantMessageToAcpNotifications(
             msg,
             sessionId,
