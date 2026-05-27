@@ -72,7 +72,12 @@ export async function createBashShellProvider(
   return {
     type: 'bash',
     shellPath,
-    detached: true,
+    // POSIX: detached creates a process group so the whole tree can be signalled.
+    // Windows: detached (DETACHED_PROCESS) forces a console-subsystem bash to
+    // allocate a NEW console window — which Bun does not hide (unlike Node) — so
+    // a black terminal flashes on every command. Windows tree-kill uses
+    // `taskkill /T` (not process groups), so detaching buys nothing here.
+    detached: process.platform !== 'win32',
 
     async buildExecCommand(
       command: string,
