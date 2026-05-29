@@ -1393,10 +1393,20 @@ async function* queryModel(
     if (deferredToolList) {
       // Append to the end of the messages array (not prepend) so it
       // never抢占 <project-instructions> (CLAUDE.md) at the front.
+      // This reminder fires on EVERY API call (it lives outside the cached
+      // system prompt so the list can change mid-conversation). Earlier
+      // wording included "IMPORTANT:" + a numbered procedure, which the
+      // model interpreted as a fresh user-level instruction and prefaced
+      // every turn with "收到提醒。这些延迟加载工具与当前任务无关,继续..."
+      // —— wasting tokens + user attention.
+      //
+      // Tightened to a single declarative sentence and an explicit silence
+      // instruction. Discovery steps are taught once in the system prompt
+      // (constants/prompts.ts) instead of repeated here per-turn.
       messagesForAPI = [
         ...messagesForAPI,
         createUserMessage({
-          content: `<system-reminder>\n<available-deferred-tools>\n${deferredToolList}\n</available-deferred-tools>\nIMPORTANT: The tools listed above are deferred-loading — they are NOT in your tool list. To use them, you MUST first discover a tool via SearchExtraTools, then invoke it with ExecuteExtraTool.\n\nSearchExtraTools and ExecuteExtraTool are core tools already in your tool list right now — call them directly, do NOT use Bash/Glob to find them.\n\nSteps:\n1. SearchExtraTools({"query": "select:<tool_name>"}) — discover the tool and its schema\n2. ExecuteExtraTool({"tool_name": "<name>", "params": {...}}) — invoke it with correct parameters\n</system-reminder>`,
+          content: `<system-reminder>\n<available-deferred-tools>\n${deferredToolList}\n</available-deferred-tools>\nThese tools are deferred — not in your active tool list. If a task needs one, fetch its schema via SearchExtraTools then invoke via ExecuteExtraTool. Process this reminder silently; do not acknowledge or summarise it in your reply.\n</system-reminder>`,
           isMeta: true,
         }),
       ]
