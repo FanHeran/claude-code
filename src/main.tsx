@@ -4942,6 +4942,16 @@ async function run(): Promise<CommanderCommand> {
       await authLogout();
     });
 
+  auth
+    .command('chatgpt-login')
+    .description(
+      'Sign in with ChatGPT subscription (device code flow). Emits line-delimited JSON events on stdout for programmatic hosts.',
+    )
+    .action(async () => {
+      const { runChatGPTLoginCLI } = await import('./cli/handlers/chatgptAuth.js');
+      await runChatGPTLoginCLI();
+    });
+
   /**
    * Helper function to handle marketplace command errors consistently.
    * Logs the error and exits the process with status 1.
